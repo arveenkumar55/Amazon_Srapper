@@ -1,0 +1,1134 @@
+from datetime import datetime, timedelta
+import re
+import os, random, requests, string, sys, time
+from PyQt5.QtCore import pyqtSlot, QThread, Qt
+from PyQt5.QtGui import QIcon, QGuiApplication
+from PyQt5.QtWidgets import (QMainWindow, QApplication, QPushButton, QWidget, QAction, QTabWidget, QVBoxLayout,
+                             QGroupBox, QHBoxLayout, QLineEdit, QMessageBox, QLabel, QProgressBar, QTextEdit,
+                             QCheckBox, QSizePolicy)
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.support.ui import Select
+from selenium.webdriver.common.keys import Keys
+
+
+try:
+    with open("proxy.txt", "r") as f:
+        proxy_list = f.read().strip().split("\n")
+except FileNotFoundError:
+    input("proxy.txt file not found please create the file and save the proxy list in it...")
+    exit()
+
+
+def get_random_name():
+    global first_name, last_name
+    r = requests.get('http://www.fakenamegenerator.com/gen-female-us-us.php')
+    c = r.content
+    soup = BeautifulSoup(c, 'lxml')
+    name = soup.find('h3').text
+    name = name.replace('.', '')
+    first_name, last_name = name.split(" ")[0], name.split(" ")[-1]
+    name = name.replace(" ", "")
+    return name
+
+
+def get_random_partner():
+    r = requests.get('http://www.fakenamegenerator.com/gen-male-us-us.php')
+    c = r.content
+    soup = BeautifulSoup(c, 'lxml')
+    name = soup.find('h3').text
+    name = name.replace('.', '')
+    first_name, last_name = name.split(" ")[0], name.split(" ")[-1]
+    address = re.sub("\s\s+|\n+", " ", soup.find("div", attrs={"class": "adr"}).text.strip())
+    zip_code = re.search("[A-Z][A-Z] (\d\d\d\d\d)", address).group(1)
+    state = re.search("[A-Z][A-Z]", address).group()
+    city = re.search("(\w+),", address).group(1)
+    phone = re.search("\d\d\d-\d\d\d-\d\d\d", str(soup)).group()
+    female_name = get_random_name()
+    return name, female_name, first_name, last_name, address, city, state, zip_code, phone
+
+
+def create_wedding_list(browser):
+    name, female_name, first_name, last_name, address, city, state, zip_code, phone = get_random_partner()
+    browser.get("https://www.amazon.com/wedding/new-registry?associateId=&associateSubId=")
+    browser.find_element_by_name('firstNamePartner1').send_keys(first_name)
+    browser.find_element_by_name('surnamePartner1').send_keys(last_name)
+    browser.find_element_by_name('firstNamePartner2').send_keys(female_name)
+    browser.find_element_by_name('surnamePartner2').send_keys(female_name)
+
+    browser.find_element_by_name('address-ui-widgets-enterAddressFullName').send_keys(name)
+    browser.find_element_by_name('address-ui-widgets-enterAddressLine1').send_keys(address[:-5])
+    browser.find_element_by_name('address-ui-widgets-enterAddressLine2').send_keys(address[-5:])
+
+    browser.find_element_by_name('address-ui-widgets-enterAddressCity').send_keys(city)
+    browser.find_element_by_name('address-ui-widgets-enterAddressStateOrRegion').send_keys(state)
+    browser.find_element_by_name('address-ui-widgets-enterAddressPostalCode').send_keys(zip_code)
+    browser.find_element_by_name('address-ui-widgets-enterAddressPhoneNumber').send_keys(phone)
+
+    event_month = Select(browser.find_element_by_id('wr-cm-event-date-month'))
+    event_month.select_by_value(str(random.randint(0,11)))
+
+    event_day = Select(browser.find_element_by_id('wr-cm-event-date-day'))
+    event_day.select_by_value(str(random.randint(1,25)))
+
+    event_year = Select(browser.find_element_by_id('wr-cm-event-date-year'))
+    event_year.select_by_value(str(random.randint(2018,2020)))
+
+    browser.find_element_by_name('weddingCity').send_keys(city)
+    event_state = Select(browser.find_element_by_id('wr-cm-event-state'))
+    event_state.select_by_value("NY")
+    browser.find_elements_by_class_name('a-button-input')[-2].click()
+    time.sleep(4)
+    browser.find_elements_by_class_name('a-button-input')[-1].click()
+
+"""
+def register(name):
+    browser.get('https://www.amazon.com/ap/register?_encoding=UTF8&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dnav_newcust')
+    browser.find_element_by_name('customerName').send_keys(name)
+    browser.find_element_by_name('email').send_keys(name + '2018@gmail.com')
+    browser.find_element_by_name('password').send_keys('ggghhhiiiccc222')
+    browser.find_element_by_name('passwordCheck').send_keys('ggghhhiiiccc222')
+    browser.find_element_by_id('continue').click()
+
+
+def login(username, password):
+    browser.get('https://www.amazon.com/ap/signin?_encoding=UTF8&ignoreAuthState=1&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2F%3Fref_%3Dnav_signin&switch_account=')
+    browser.find_element_by_id('ap_email').send_keys(username)
+    browser.find_element_by_id('ap_password').send_keys(password)
+    browser.find_element_by_id('signInSubmit').click()
+"""
+
+
+def insert_into_table(keyword, rank, url):
+    print("Shaddy url skipped...")
+    # payload = {'keyword': keyword,'rank': rank,'url': url,'submit': 'submit'}
+    # requests.post('http://curlas.com/amazon.php', data=payload)
+
+
+class App(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.title = 'Amazon Bot v1.3'
+        self.left = 100
+        self.top = 100
+        self.width = 800
+        self.height = 600
+        self.setWindowTitle(self.title)
+        self.setGeometry(self.left, self.top, self.width, self.height)
+        self.table_widget = MyTableWidget(self)
+        self.setCentralWidget(self.table_widget)
+        self.show()
+
+
+class MyTableWidget(QWidget):
+    def add_from_groups(self):
+        textboxValue_username_events_one = self.textbox_username_events_search.toPlainText().split('\n')
+        textboxValue_amazon_asin_one = self.textbox_amazon_asin_search.text()
+        textboxValue_amazon_loop_one = self.textbox_amazon_loop_search.text()
+        textboxValue_break_first_one = self.textbox_amazon_break_first_search.text()
+        textboxValue_break_second_one = self.textbox_amazon_break_second_search.text()
+        textboxValue_keyword_to_search_one = self.textbox_keyword_to_search_search.text()
+        wishlist_enabled = self.acheck_wishlist.isChecked()
+        giftlist_enabled = self.acheck_gift_list.isChecked()
+        shoppinglist_enabled = self.acheck_shopping_list.isChecked()
+        wedding_list_enabled = self.acheck_wedding_list.isChecked()
+        ranking_enabled = self.acheck_gift_ranking.isChecked()
+        try:
+            i = 0
+            while 1:
+                if i <= int(textboxValue_amazon_loop_one):
+                    i = i + 1
+                    proxy_address = random.choice(textboxValue_username_events_one)
+                    random_sleep = random.randint(int(textboxValue_break_first_one), int(textboxValue_break_second_one))
+                    print(random_sleep)
+                    project_dir = os.path.dirname(__file__)
+                    chromedriver_path = os.path.join(project_dir, 'chromedriver.exe')
+                    chrome_options = webdriver.ChromeOptions()
+                    chrome_options.add_argument('--proxy-server=http://%s' % proxy_address)
+                    browser = webdriver.Chrome(chromedriver_path, chrome_options=chrome_options)
+                    name = get_random_name()
+                    browser.get('https://www.amazon.com/')
+                    try:
+                        browser.find_element_by_id('nav-link-accountList').click()
+                        browser.find_element_by_id('createAccountSubmit').click()
+                        browser.find_element_by_name('customerName').send_keys(name)
+                        browser.find_element_by_name('email').send_keys(name + '2018@gmail.com')
+                        browser.find_element_by_name('password').send_keys('ggghhhiiiccc222')
+                        browser.find_element_by_name('passwordCheck').send_keys('ggghhhiiiccc222')
+                        browser.find_element_by_id('continue').click()
+                        browser.find_element_by_id('twotabsearchtextbox').send_keys(textboxValue_keyword_to_search_one)
+                    except Exception:
+                        print('Possibly met captcha, qutting')
+                        browser.quit()
+                        continue
+
+                    browser.find_element_by_class_name('nav-input').click()
+                    time.sleep(1)
+                    main_page_url = browser.current_url
+                    for pg in range(2, 100):
+                        soup = BeautifulSoup(browser.page_source, 'lxml')
+                        for a in soup.find_all('a', attrs={'class': 's-access-detail-page'}):
+                            products_from_store = a['href']
+                            if textboxValue_amazon_asin_one in products_from_store:
+                                try:
+                                    browser.get(products_from_store)
+                                except Exception:
+                                    browser.get('https://www.amazon.com' + products_from_store)
+
+                                print('GOT!')
+                                time.sleep(1)
+                                cur_item_url = browser.current_url
+                                source_for_rank = browser.page_source
+                                soup = BeautifulSoup(source_for_rank, 'lxml')
+                                rank = soup.find('li', {'id': 'SalesRank'})
+                                try:
+                                    split_rank = rank.text.split(
+                                        'Amazon Best Sellers Rank:'
+                                    )[1].split('.zg_hrsr { margin: 0; padding: 0; list-style-type: none; }')[0]
+                                    new_rank = split_rank.replace('\n', '')
+                                except AttributeError:
+                                    try:
+                                        split_rank = source_for_rank.split('Best Sellers Rank')[1].split('</tr>')[0]
+                                        new_rank = split_rank.replace('\n', '')
+                                    except:
+                                        print('Could not find best sellers rank')
+                                        new_rank = 'did not find'
+                                print(wishlist_enabled)
+                                print('Statistics Updated')
+                                if wishlist_enabled:
+                                    try:
+                                        wishlist = browser.find_element_by_id(
+                                            'add-to-wishlist-button-submit')
+                                        browser.execute_script('arguments[0].click();', wishlist)
+                                        time.sleep(5)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_privacy_public"]/span/input').click()
+                                        time.sleep(1)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_section_wlType"]/div[2]/div[2]/div/div/span/div/label').click()
+                                        time.sleep(1)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                        time.sleep(3)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                        print('Added to Wishlist')
+                                    except NoSuchElementException:
+                                        print('No wishlist button')
+
+                                if wedding_list_enabled:
+                                    create_wedding_list(browser)
+                                    try:
+                                        try:
+                                            browser.get(products_from_store)
+                                        except Exception:
+                                            browser.get('https://www.amazon.com' + products_from_store)
+                                        wedding_list = browser.find_element_by_id('add-to-registry-wedding-button')
+                                        browser.execute_script('arguments[0].click();', wedding_list)
+                                        time.sleep(2)
+                                        print('Added to Wedding list')
+                                    except NoSuchElementException:
+                                        print('No wedding list button')
+
+                                if shoppinglist_enabled:
+                                    try:
+                                        wishlist = browser.find_element_by_id('add-to-wishlist-button-submit')
+                                        browser.execute_script('arguments[0].click();', wishlist)
+                                        time.sleep(5)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_privacy_public"]/span/input').click()
+                                        time.sleep(1)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_section_wlType"]/div[2]/div[1]/div/div/span/div/label/span'
+                                        ).click()
+                                        time.sleep(1)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                        time.sleep(3)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button'
+                                        ).click()
+                                        print('Added to shopping list')
+                                    except NoSuchElementException:
+                                        print('No wishlist button')
+
+                                if giftlist_enabled:
+                                    try:
+                                        wishlist = browser.find_element_by_id('add-to-wishlist-button-submit')
+                                        browser.execute_script('arguments[0].click();', wishlist)
+                                        time.sleep(5)
+
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_section_wlType"]/div[2]/div[1]/div/div/span/div/label/span').click()
+                                        time.sleep(1)
+                                        browser.find_element_by_xpath('//*[@id="WLNEW_list_for"]/span').click()
+                                        time.sleep(1)
+                                        browser.find_element_by_xpath('//*[@id="create_for_1"]').click()
+                                        time.sleep(2)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_recipient_first_name"]').send_keys(first_name)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="WLNEW_recipient_last_name"]'
+                                        ).send_keys(last_name + Keys.TAB + Keys.TAB + Keys.TAB + Keys.TAB + Keys.TAB +
+                                                    Keys.ENTER + Keys.TAB + Keys.TAB + Keys.TAB + Keys.ENTER)
+                                        time.sleep(3)
+                                        browser.find_element_by_xpath(
+                                            '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                        print('Added to gift list')
+                                        time.sleep(1)
+                                    except Exception as e:
+                                        print(e)
+
+                                    if ranking_enabled:
+                                        print('yes')
+                                        soup = BeautifulSoup(browser.page_source, 'lxml')
+                                        all_reviews = \
+                                        soup.find('div', attrs={'class': 'a-row a-spacing-large'}).find('a')['href']
+                                        print(all_reviews)
+                                        browser.get('https://www.amazon.com' + all_reviews)
+                                        time.sleep(10)
+                                        soup = BeautifulSoup(browser.page_source, 'lxml')
+                                        a = soup.find_all('a', attrs={'id': 'a-autoid-8-announce'})
+                                        print(len(a))
+                                        b = i
+                                        for i, an in enumerate(a):
+                                            if i == b:
+                                                print(an['href'])
+                                                browser.get(an['href'])
+                                        if b == len(a):
+                                            if soup.find('li', attrs={'class': 'a-last'}):
+                                                try:
+                                                    if soup.find('li', attrs={'class': 'a-last'}):
+                                                        for i, an in enumerate(a):
+                                                            if i == b:
+                                                                browser.get(an['href'])
+                                                            else:
+                                                                for i, an in enumerate(a['href']):
+                                                                    if i == b:
+                                                                        browser.get(an)
+                                                        c = soup.find('li', attrs={'class': 'a-last'}).find('a')['href']
+                                                        browser.get('https://www.amazon.com' + c)
+                                                except:
+                                                    print('no next button')
+
+                                print('Succesfully Added to Cart and Wishlist, sleeping for ' + str(random_sleep) + ' and quitting')
+                                webdriver.ActionChains(browser).send_keys(Keys.ESCAPE).perform()
+                                time.sleep(random_sleep)
+                                browser.quit()
+                                print('Your Product is on Page 1 already, Program will not rank anymore.')
+                        else:
+                            print('didnt find, going to page ' + str(pg))
+                            browser.get(main_page_url + '&page=' + str(pg))
+                            soup = BeautifulSoup(browser.page_source, 'lxml')
+                            for a in soup.find_all('a', href=True):
+                                products_from_store = a['href']
+                                if textboxValue_amazon_asin_one in products_from_store:
+                                    try:
+                                        browser.get(products_from_store)
+                                    except Exception:
+                                        browser.get('https://www.amazon.com' + products_from_store)
+
+                                    print('yes!')
+                                    print(wishlist_enabled)
+                                    cur_item_url = browser.current_url
+                                    source_for_rank = browser.page_source
+                                    soup = BeautifulSoup(source_for_rank, 'lxml')
+                                    rank = soup.find('li', {'id': 'SalesRank'})
+                                    try:
+                                        split_rank = rank.text.split('Amazon Best Sellers Rank:')[1].split('.zg_hrsr { margin: 0; padding: 0; list-style-type: none; }')[0]
+                                        new_rank = split_rank.replace('\n', '')
+                                    except AttributeError:
+                                        try:
+                                            split_rank = source_for_rank.split('Best Sellers Rank')[1].split('</tr>')[0]
+                                            new_rank = split_rank.replace('\n', '')
+                                        except:
+                                            print('Could not find best sellers rank')
+                                            new_rank = 'did not find'
+
+                                    print('Statistics Updated')
+                                    if wishlist_enabled:
+                                        try:
+                                            wishlist = browser.find_element_by_id(
+                                                'add-to-wishlist-button-submit')
+                                            browser.execute_script('arguments[0].click();', wishlist)
+                                            time.sleep(5)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_privacy_public"]/span/input').click()
+                                            time.sleep(1)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_section_wlType"]/div[2]/div[2]/div/div/span/div/label').click()
+                                            time.sleep(1)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                            time.sleep(3)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                            print('Added to Wishlist')
+                                        except NoSuchElementException:
+                                            print('No wishlist button')
+
+                                    if wedding_list_enabled:
+                                        create_wedding_list(browser)
+                                        try:
+                                            browser.get(product)
+                                            wedding_list = browser.find_element_by_id(
+                                                'add-to-registry-wedding-button')
+                                            browser.execute_script('arguments[0].click();', wedding_list)
+                                            time.sleep(2)
+                                            print('Added to Wedding list')
+                                        except NoSuchElementException:
+                                            print('No wedding list button')
+
+                                    if shoppinglist_enabled:
+                                        try:
+                                            wishlist = browser.find_element_by_id(
+                                                'add-to-wishlist-button-submit')
+                                            browser.execute_script('arguments[0].click();', wishlist)
+                                            time.sleep(5)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_privacy_public"]/span/input').click()
+                                            time.sleep(1)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_section_wlType"]/div[2]/div[1]/div/div/span/div/label/span').click()
+                                            time.sleep(1)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                            time.sleep(3)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                            print('Added to shopping list')
+                                        except NoSuchElementException:
+                                            print('No wishlist button')
+
+                                    if giftlist_enabled:
+                                        try:
+                                            wishlist = browser.find_element_by_id('add-to-wishlist-button-submit')
+                                            browser.execute_script('arguments[0].click();', wishlist)
+                                            time.sleep(5)
+
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_section_wlType"]/div[2]/div[1]/div/div/span/div/label/span').click()
+                                            time.sleep(1)
+                                            browser.find_element_by_xpath('//*[@id="WLNEW_list_for"]/span').click()
+                                            time.sleep(1)
+                                            browser.find_element_by_xpath('//*[@id="create_for_1"]').click()
+                                            time.sleep(2)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_recipient_first_name"]').send_keys(first_name)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="WLNEW_recipient_last_name"]'
+                                            ).send_keys(
+                                                last_name + Keys.TAB + Keys.TAB + Keys.TAB + Keys.TAB + Keys.TAB +
+                                                Keys.ENTER + Keys.TAB + Keys.TAB + Keys.TAB + Keys.ENTER)
+                                            time.sleep(3)
+                                            browser.find_element_by_xpath(
+                                                '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                            print('Added to gift list')
+                                            time.sleep(1)
+                                        except Exception as e:
+                                            print(e)
+
+                                    if ranking_enabled:
+                                        soup = BeautifulSoup(browser.page_source, 'lxml')
+                                        all_reviews = \
+                                            soup.find('div', attrs={'class': 'a-row a-spacing-large'}).find('a')['href']
+                                        browser.get('https://www.amazon.com' + all_reviews)
+                                        time.sleep(10)
+
+                                        soup = BeautifulSoup(browser.page_source, 'lxml')
+                                        a = soup.find_all('a', attrs={'id': 'a-autoid-8-announce'})
+                                        print(len(a))
+                                        b = i
+                                        for i, an in enumerate(a):
+                                            if i == b:
+                                                print(an['href'])
+                                                browser.get(an['href'])
+                                        if b == len(a):
+                                            if soup.find('li', attrs={'class': 'a-last'}):
+                                                try:
+                                                    if soup.find('li', attrs={'class': 'a-last'}):
+                                                        for i, an in enumerate(a):
+                                                            if i == b:
+                                                                browser.get(an['href'])
+                                                            else:
+                                                                for i, an in enumerate(a['href']):
+                                                                    if i == b:
+                                                                        browser.get(an)
+                                                        c = soup.find('li', attrs={'class': 'a-last'}).find('a')['href']
+                                                        browser.get('https://www.amazon.com' + c)
+                                                except:
+                                                    print('no next button')
+
+                                    print('Succesfully Added to Cart and Wishlist, sleeping for ' + str(random_sleep) + ' and quitting')
+                                    webdriver.ActionChains(browser).send_keys(Keys.ESCAPE).perform()
+                                    time.sleep(random_sleep)
+                                    browser.quit()
+                                    break
+                            else:
+                                continue
+
+                            break
+
+        except Exception as e:
+            print(e)
+
+    @pyqtSlot()
+    def on_click_add_from_events(self):
+        textboxValue_username_events = self.textbox_username_events.text().split(',')
+        textboxValue_username_add_from_events = self.textbox_username_add_from_events.text()
+        textboxValue_amazon_asin = self.textbox_amazon_asin.text()
+        textboxValue_amazon_loop = self.textbox_amazon_loop.text()
+        textboxValue_break_first = self.textbox_amazon_break_first.text()
+        textboxValue_break_second = self.textbox_amazon_break_second.text()
+        textboxValue_keyword_to_search = self.textbox_keyword_to_search.text()
+        try:
+            i = 0
+            while 1:
+                if i <= int(textboxValue_amazon_loop):
+                    i = i + 1
+                    proxy_address = random.choice(textboxValue_username_events)
+                    random_sleep = random.randint(int(textboxValue_break_first), int(textboxValue_break_second))
+                    print(random_sleep)
+                    project_dir = os.path.dirname(__file__)
+                    chromedriver_path = os.path.join(project_dir, 'chromedriver.exe')
+                    chrome_options = webdriver.ChromeOptions()
+                    chrome_options.add_argument('--proxy-server=http://%s' % proxy_address)
+                    browser = webdriver.Chrome(chromedriver_path, chrome_options=chrome_options)
+                    name = get_random_name()
+                    try:
+                        browser.get('https://www.amazon.com/')
+                        browser.find_element_by_id('nav-link-accountList').click()
+                        browser.find_element_by_id('createAccountSubmit').click()
+                        browser.find_element_by_name('customerName').send_keys(name)
+                        browser.find_element_by_name('email').send_keys(name + '2018@gmail.com')
+                        browser.find_element_by_name('password').send_keys('ggghhhiiiccc222')
+                        browser.find_element_by_name('passwordCheck').send_keys('ggghhhiiiccc222')
+                        browser.find_element_by_id('continue').click()
+                        browser.get(textboxValue_username_add_from_events)
+                        browser.find_element_by_id('twotabsearchtextbox').send_keys(textboxValue_keyword_to_search)
+                    except Exception:
+                        print('Possibly met captcha, qutting')
+                        browser.quit()
+                        continue
+
+                    browser.find_element_by_class_name('nav-input').click()
+                    time.sleep(1)
+                    soup = BeautifulSoup(browser.page_source, 'lxml')
+                    for a in soup.find_all('a', href=True):
+                        products_from_store = a['href']
+                        try:
+                            products_from_store = products_from_store.split('#')[0]
+                        except Exception:
+                            pass
+
+                        if textboxValue_amazon_asin in products_from_store:
+                            try:
+                                browser.get(products_from_store)
+                            except Exception:
+                                browser.get('https://www.amazon.com' + products_from_store)
+
+                            print('GOT!')
+                            source_for_rank = browser.page_source
+                            soup = BeautifulSoup(source_for_rank, 'lxml')
+                            rank = soup.find('li', {'id': 'SalesRank'})
+                            try:
+                                split_rank = rank.text.split('Amazon Best Sellers Rank:')[1].split('.zg_hrsr { margin: 0; padding: 0; list-style-type: none; }')[0]
+                                new_rank = split_rank.replace('\n', '')
+                            except AttributeError:
+                                try:
+                                    split_rank = source_for_rank.split('Best Sellers Rank')[1].split('</tr>')[0]
+                                    new_rank = split_rank.replace('\n', '')
+                                except:
+                                    print('Could not find best sellers rank')
+                                    new_rank = 'did not find'
+
+                            cur_item_url = browser.current_url
+                            print('Statistics Updated')
+                            browser.execute_script('window.scrollTo(0,0)')
+                            try:
+                                cart = browser.find_element_by_id('add-to-cart-button')
+                                browser.execute_script('return arguments[0].scrollIntoView(true);', cart)
+                                cart.click()
+                            except Exception:
+                                cart = browser.find_element_by_id('add-to-cart-button')
+                                browser.execute_script('return arguments[0].scrollIntoView(true);', cart)
+                                browser.execute_script('arguments[0].click();', cart)
+
+                            time.sleep(3)
+                            try:
+                                nothanks = browser.find_element_by_id('siNoCoverage-announce')
+                                nothanks.click()
+                            except NoSuchElementException:
+                                pass
+
+                            webdriver.ActionChains(browser).send_keys(Keys.ESCAPE).perform()
+                            browser.back()
+                            try:
+                                wishlist = browser.find_element_by_id('add-to-wishlist-button-submit')
+                                browser.execute_script('arguments[0].click();', wishlist)
+                                time.sleep(2)
+                                browser.find_element_by_xpath('//*[@id="WLNEW_section_wlType"]/div[2]/div[2]/div/div/span/div/label').click()
+                                browser.find_element_by_xpath('//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                print('Added to Wishlist')
+                            except NoSuchElementException:
+                                print('No wishlist button')
+
+                            try:
+                                browser.find_element_by_xpath('//*[@id="a-autoid-9-announce"]/div').click()
+                                print('Review rated succesfully')
+                            except Exception:
+                                pass
+
+                            print('Succesfully Added to Cart and Wishlist, sleeping for ' + str(random_sleep) + ' and quitting')
+                            webdriver.ActionChains(browser).send_keys(Keys.RETURN).perform()
+                            time.sleep(random_sleep)
+                            browser.quit()
+                            break
+                        else:
+                            print('didnt find your ASIN number, check if it is correct: ' + textboxValue_amazon_asin)
+                    continue
+        except Exception as e:
+            print(e)
+
+    def click_ads(self):
+        textboxValue_proxies_adclicker = self.textbox_proxy_adclicker.text().split(',')
+        textboxValue_amazon_asin_adclicker = self.textbox_asin_adclicker.text()
+        textboxValue_amazon_loop_adclicker = self.textbox_loop_adclicker.text()
+        textboxValue_break_first_adclicker = self.textbox_break_first_adclicker.text()
+        textboxValue_break_second_adclicker = self.textbox_break_second_adclicker.text()
+        textboxValue_keyword_adclicker = self.textbox_keyword_adclicker.text()
+        try:
+            i = 0
+            while 1:
+                if i <= int(textboxValue_amazon_loop_adclicker):
+                    i = i + 1
+                    proxy_address = random.choice(textboxValue_proxies_adclicker)
+                    random_sleep = random.randint(int(textboxValue_break_first_adclicker), int(textboxValue_break_second_adclicker))
+                    print(random_sleep)
+                    project_dir = os.path.dirname(__file__)
+                    chromedriver_path = os.path.join(project_dir, 'chromedriver.exe')
+                    chrome_options = webdriver.ChromeOptions()
+                    chrome_options.add_argument('--proxy-server=http://%s' % proxy_address)
+                    browser = webdriver.Chrome(chromedriver_path, chrome_options=chrome_options)
+                    browser.get('https://www.amazon.com/')
+                    try:
+                        browser.find_element_by_id('twotabsearchtextbox').send_keys(textboxValue_keyword_adclicker)
+                    except Exception:
+                        print('Possibly met an error, qutting and starting over')
+                        browser.quit()
+                        continue
+
+                    browser.find_element_by_class_name('nav-input').click()
+                    print('Looking for ads...')
+                    time.sleep(5)
+                    elems = browser.find_elements_by_xpath('//a[@href]')
+                    for elem in elems:
+                        if textboxValue_amazon_asin_adclicker in elem.get_attribute('href'):
+                            browser.get(elem.get_attribute('href'))
+                            print('Ad Succesfully Clicked!')
+                            browser.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+                            print('Sleeping for ' + str(random_sleep) + ' seconds and Quitting')
+                            time.sleep(random_sleep)
+                            browser.quit()
+                            break
+                    else:
+                        print('Ad is not found, please check your ASIN KEY')
+                        browser.quit()
+                        break
+
+        except Exception as e:
+            print(e)
+
+    def rank_by_category(self):
+        textboxValue_proxies_categories = self.textbox_proxy_categories.toPlainText().split('\n')
+        textboxValue_amazon_asin_categories = self.textbox_asin_categories.text()
+        textboxValue_amazon_loop_categories = self.textbox_loop_categories.text()
+        textboxValue_break_first_categories = self.textbox_break_first_categories.text()
+        textboxValue_break_second_categories = self.textbox_break_second_categories.text()
+        textboxValue_keyword_categories = self.textbox_keyword_categories.text()
+        textboxValue_category_url = self.textbox_category_url.text()
+        textboxValue_product_url = self.textbox_product_url.toPlainText()
+        wishlist_enabled = self.check_wishlist.isChecked()
+        giftlist_enabled=self.check_gift_list.isChecked()
+        shoppinglist_enabled =self.check_shopping_list.isChecked()
+        wedding_list_enabled = self.check_wedding_list.isChecked()
+        ranking_enabled=self.check_gift_list.isChecked()
+        progress_label = self.progress_label
+        progress = self.progress
+
+        total_count = int(textboxValue_amazon_loop_categories)
+        progress_label.setText("Current status: 0 / {}".format(total_count))
+        progress.setMaximum(total_count)
+
+        for i in range(1, int(textboxValue_amazon_loop_categories)):
+            progress_label.setText("Current status: {} / {}".format(i, total_count))
+            progress.setValue(i)
+
+            proxy_address = random.choice(textboxValue_proxies_categories)
+            random_sleep = random.randint(int(textboxValue_break_first_categories),
+                                          int(textboxValue_break_second_categories))
+            project_dir = os.path.dirname(__file__)
+            chromedriver_path = os.path.join(project_dir, 'chromedriver.exe')
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument('--proxy-server=http://%s' % proxy_address)
+            browser = webdriver.Chrome(chromedriver_path, chrome_options=chrome_options)
+
+            name = get_random_name()
+            try:
+                browser.get('https://www.amazon.com/')
+                browser.find_element_by_id('nav-link-accountList').click()
+                browser.find_element_by_id('createAccountSubmit').click()
+                print(name)
+                browser.find_element_by_name('customerName').send_keys(name)
+                browser.find_element_by_name('email').send_keys(name + '2018@gmail.com')
+                browser.find_element_by_name('password').send_keys('ggghhhiiiccc222')
+                browser.find_element_by_name('passwordCheck').send_keys('ggghhhiiiccc222')
+                browser.find_element_by_id('continue').click()
+                print('Captcha bypassed')
+
+                for product in textboxValue_product_url.split("\n"):
+                    try:
+                        browser.get(product)
+
+                        if wishlist_enabled:
+                            try:
+                                wishlist = browser.find_element_by_id('add-to-wishlist-button-submit')
+                                browser.execute_script('arguments[0].click();', wishlist)
+                                time.sleep(5)
+                                browser.find_element_by_xpath('//*[@id="WLNEW_privacy_public"]/span/input').click()
+                                time.sleep(1)
+                                browser.find_element_by_xpath(
+                                    '//*[@id="WLNEW_section_wlType"]/div[2]/div[2]/div/div/span/div/label').click()
+                                time.sleep(1)
+                                browser.find_element_by_xpath('//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                time.sleep(3)
+                                browser.find_element_by_xpath(
+                                    '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                print('Added to Wishlist')
+                            except NoSuchElementException:
+                                print('No wishlist button')
+
+                        if wedding_list_enabled:
+                            create_wedding_list(browser)
+                            try:
+                                time.sleep(3)
+                                browser.get(product)
+                                wedding_list = browser.find_element_by_id('add-to-registry-wedding-button')
+                                browser.execute_script('arguments[0].click();', wedding_list)
+                                time.sleep(2)
+                                print('Added to Wedding list')
+                            except NoSuchElementException:
+                                print('No wedding list button')
+
+                        if shoppinglist_enabled:
+                            try:
+                                wishlist = browser.find_element_by_id(
+                                    'add-to-wishlist-button-submit')
+                                browser.execute_script('arguments[0].click();', wishlist)
+                                time.sleep(5)
+                                browser.find_element_by_xpath(
+                                    '//*[@id="WLNEW_privacy_public"]/span/input').click()
+                                time.sleep(1)
+                                browser.find_element_by_xpath('//*[@id="WLHUC_result"]/form/div[2]/span[3]/span/span/input').click()
+                                time.sleep(3)
+                                browser.find_element_by_xpath(
+                                    '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                print('Added to shopping list')
+                                time.sleep(1)
+                            except Exception as e:
+                                print(e)
+
+                        if giftlist_enabled:
+                            try:
+                                wishlist = browser.find_element_by_id('add-to-wishlist-button-submit')
+                                browser.execute_script('arguments[0].click();', wishlist)
+                                time.sleep(5)
+
+                                browser.find_element_by_xpath('//*[@id="WLNEW_section_wlType"]/div[2]/div[1]/div/div/span/div/label/span').click()
+                                time.sleep(1)
+                                browser.find_element_by_xpath('//*[@id="WLNEW_list_for"]/span').click()
+                                time.sleep(1)
+                                browser.find_element_by_xpath('//*[@id="create_for_1"]').click()
+                                time.sleep(2)
+                                browser.find_element_by_xpath('//*[@id="WLNEW_recipient_first_name"]').send_keys(first_name)
+                                browser.find_element_by_xpath(
+                                    '//*[@id="WLNEW_recipient_last_name"]'
+                                ).send_keys(last_name + Keys.TAB + Keys.TAB + Keys.TAB + Keys.TAB + Keys.TAB +
+                                            Keys.ENTER + Keys.TAB + Keys.TAB + Keys.TAB + Keys.ENTER)
+                                time.sleep(3)
+                                browser.find_element_by_xpath(
+                                    '//*[@id="wl-huc-post-create-msg"]/div/div[2]/span[2]/span/span/button').click()
+                                print('Added to gift list')
+                                time.sleep(1)
+                            except Exception as e:
+                                print(e)
+
+                        if ranking_enabled:
+                            soup = BeautifulSoup(browser.page_source, 'lxml')
+                            all_reviews = soup.find('div', attrs={'class': 'a-row a-spacing-large'}).find('a')['href']
+                            browser.get('https://www.amazon.com' + all_reviews)
+                            time.sleep(10)
+                            soup = BeautifulSoup(browser.page_source, 'lxml')
+                            a = soup.find_all('a', attrs={'id': 'a-autoid-8-announce'})
+                            print(len(a))
+                            b = i
+                            for i, an in enumerate(a):
+                                if i == b:
+                                    print(an['href'])
+                                    browser.get(an['href'])
+                            if b == len(a):
+                                if soup.find('li', attrs={'class': 'a-last'}):
+                                    try:
+                                        if soup.find('li', attrs={'class': 'a-last'}):
+                                            for i, an in enumerate(a):
+                                                if i == b:
+                                                    browser.get(an['href'])
+                                                else:
+                                                    for i, an in enumerate(a['href']):
+                                                        if i == b:
+                                                            browser.get(an)
+                                            c = soup.find('li', attrs={'class': 'a-last'}).find('a')['href']
+                                            browser.get('https://www.amazon.com' + c)
+                                    except:
+                                        print('no next button')
+                    except Exception as e:
+                        print(e)
+
+            except Exception as e:
+                print(e)
+                raise Exception("Amazon is asking Captcha")
+
+            finally:
+                browser.quit()
+
+            QGuiApplication.processEvents()
+
+    def click_ads_no_proxy(self):
+        textboxValue_amazon_asin_adclicker_no_proxy = self.textbox_asin_adclicker_no_proxy.text()
+        textboxValue_amazon_loop_adclicker_no_proxy = self.textbox_loop_adclicker_no_proxy.text()
+        textboxValue_break_first_adclicker_no_proxy = self.textbox_break_first_adclicker_no_proxy.text()
+        textboxValue_break_second_adclicker_no_proxy = self.textbox_break_second_adclicker_no_proxy.text()
+        textboxValue_keyword_adclicker_no_proxy = self.textbox_keyword_adclicker_no_proxy.text()
+        print(textboxValue_amazon_asin_adclicker_no_proxy)
+        try:
+            i = 0
+            while 1:
+                if i <= int(textboxValue_amazon_loop_adclicker_no_proxy):
+                    i = i + 1
+                    print('Looking for a valid proxy... Please wait...')
+                    print('PROXY FOUND!')
+                    random_sleep = random.randint(int(textboxValue_break_first_adclicker_no_proxy), int(textboxValue_break_second_adclicker_no_proxy))
+                    print(random_sleep)
+                    project_dir = os.path.dirname(__file__)
+                    chromedriver_path = os.path.join(project_dir, 'chromedriver.exe')
+                    chrome_options = webdriver.ChromeOptions()
+                    browser = webdriver.Chrome(chromedriver_path, chrome_options=chrome_options)
+                    browser.get('https://www.amazon.com/')
+                    try:
+                        browser.find_element_by_id('twotabsearchtextbox').send_keys(textboxValue_keyword_adclicker_no_proxy)
+                    except Exception:
+                        print('Possibly met an error, qutting and starting over')
+                        browser.quit()
+                        continue
+
+                    browser.find_element_by_class_name('nav-input').click()
+                    print('Looking for ads...')
+                    time.sleep(5)
+                    elems = browser.find_elements_by_xpath('//a[@href]')
+                    for elem in elems:
+                        if textboxValue_amazon_asin_adclicker_no_proxy in elem.get_attribute('href'):
+                            browser.get(elem.get_attribute('href'))
+                            print('Ad Succesfully Clicked!')
+                            browser.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+                            print('Sleeping for ' + str(random_sleep) + ' seconds and Quitting')
+                            time.sleep(random_sleep)
+                            browser.quit()
+                            break
+                    else:
+                        print('Ad is not found, please check your ASIN KEY')
+                        browser.quit()
+                        break
+
+        except Exception as e:
+            print(e)
+
+    def __init__(self, parent):
+        super(QWidget, self).__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        self.tab1 = QWidget()
+        self.tab2 = QWidget()
+        self.tab3 = QWidget()
+        self.tab4 = QWidget()
+        self.tab5 = QWidget()
+        self.tabs.resize(300, 200)
+        self.tabs.addTab(self.tab1, 'Rank from Search')
+        self.tabs.addTab(self.tab2, 'Rank by STORE URL')
+        self.tabs.addTab(self.tab3, 'Ad-Clicker')
+        self.tabs.addTab(self.tab4, 'Rank by Category/URL')
+        self.tabs.addTab(self.tab5, 'Ad-Clicker-public-proxy')
+        self.tab1.layout = QVBoxLayout(self)
+        label = QLabel('Proxies:Ports', self.tab1)
+        label.move(130, 40)
+        label.resize(200, 20)
+        self.textbox_username_events_search = QTextEdit(self.tab1)
+        self.textbox_username_events_search.setText("\n".join(proxy_list))
+        self.textbox_username_events_search.move(130, 70)
+        self.textbox_username_events_search.resize(280, 80)
+        label = QLabel('ASIN key:', self.tab1)
+        label.move(130, 250)
+        label.resize(200, 20)
+        self.textbox_amazon_asin_search = QLineEdit(self.tab1)
+        self.textbox_amazon_asin_search.move(130, 280)
+        self.textbox_amazon_asin_search.resize(280, 20)
+        label = QLabel('How many times:', self.tab1)
+        label.move(130, 310)
+        label.resize(200, 20)
+        self.textbox_amazon_loop_search = QLineEdit(self.tab1)
+        self.textbox_amazon_loop_search.move(130, 340)
+        self.textbox_amazon_loop_search.resize(280, 20)
+        label = QLabel('Break from:', self.tab1)
+        label.move(130, 370)
+        label.resize(200, 20)
+        self.textbox_amazon_break_first_search = QLineEdit(self.tab1)
+        self.textbox_amazon_break_first_search.move(130, 400)
+        self.textbox_amazon_break_first_search.resize(60, 20)
+        label = QLabel('to:', self.tab1)
+        label.move(240, 400)
+        label.resize(200, 20)
+        self.textbox_amazon_break_second_search = QLineEdit(self.tab1)
+        self.textbox_amazon_break_second_search.move(300, 400)
+        self.textbox_amazon_break_second_search.resize(60, 20)
+        label = QLabel('Keyword:', self.tab1)
+        label.move(130, 430)
+        label.resize(200, 20)
+        self.textbox_keyword_to_search_search = QLineEdit(self.tab1)
+        self.textbox_keyword_to_search_search.move(130, 460)
+        self.textbox_keyword_to_search_search.resize(200, 20)
+
+        self.button = QPushButton('Start Ranking Search', self)
+        self.acheck_wishlist = QCheckBox("Add to Wishlist", self.tab1)
+        self.acheck_wedding_list = QCheckBox("Add to Wedding List", self.tab1)
+        self.acheck_shopping_list = QCheckBox("Add to Shopping List", self.tab1)
+        self.acheck_gift_list = QCheckBox("Add to Gift List", self.tab1)
+        self.acheck_gift_ranking = QCheckBox("Rank Products", self.tab1)
+
+        self.acheck_gift_ranking.setGeometry(400, 300, 480, 20)
+        self.acheck_gift_list.setGeometry(400, 380, 480, 20)
+        self.acheck_shopping_list.setGeometry(400, 360, 480, 20)
+        self.acheck_wishlist.setGeometry(400, 340, 500, 20)
+        self.acheck_wedding_list.setGeometry(400, 320, 500, 20)
+        self.button.clicked.connect(self.add_from_groups)
+        self.tab1.layout.addWidget(self.button, alignment=Qt.AlignBottom)
+        self.tab1.setLayout(self.tab1.layout)
+        self.tab2.layout = QVBoxLayout(self)
+        label = QLabel('Proxies:Ports', self.tab2)
+        label.move(130, 40)
+        label.resize(200, 20)
+        self.textbox_username_events = QLineEdit(self.tab2)
+        self.textbox_username_events.move(130, 70)
+        self.textbox_username_events.resize(280, 80)
+        self.textbox_username_events.resize(280, 80)
+        label = QLabel('Amazon Store url:', self.tab2)
+        label.move(130, 190)
+        label.resize(200, 20)
+        self.textbox_username_add_from_events = QLineEdit(self.tab2)
+        self.textbox_username_add_from_events.move(130, 220)
+        self.textbox_username_add_from_events.resize(280, 20)
+        label = QLabel('ASIN key:', self.tab2)
+        label.move(130, 250)
+        label.resize(200, 20)
+        self.textbox_amazon_asin = QLineEdit(self.tab2)
+        self.textbox_amazon_asin.move(130, 280)
+        self.textbox_amazon_asin.resize(280, 20)
+        label = QLabel('How many times:', self.tab2)
+        label.move(130, 310)
+        label.resize(200, 20)
+        self.textbox_amazon_loop = QLineEdit(self.tab2)
+        self.textbox_amazon_loop.move(130, 340)
+        self.textbox_amazon_loop.resize(280, 20)
+        label = QLabel('Break from:', self.tab2)
+        label.move(130, 370)
+        label.resize(200, 20)
+        self.textbox_amazon_break_first = QLineEdit(self.tab2)
+        self.textbox_amazon_break_first.move(130, 400)
+        self.textbox_amazon_break_first.resize(60, 20)
+        label = QLabel('to:', self.tab2)
+        label.move(240, 400)
+        label.resize(200, 20)
+        self.textbox_amazon_break_second = QLineEdit(self.tab2)
+        self.textbox_amazon_break_second.move(300, 400)
+        self.textbox_amazon_break_second.resize(60, 20)
+        label = QLabel('Keyword:', self.tab2)
+        label.move(130, 430)
+        label.resize(200, 20)
+        self.textbox_keyword_to_search = QLineEdit(self.tab2)
+        self.textbox_keyword_to_search.move(130, 460)
+        self.textbox_keyword_to_search.resize(200, 20)
+        self.button = QPushButton('Start Ranking by ASIN', self)
+        self.button.clicked.connect(self.on_click_add_from_events)
+        self.tab2.layout.addWidget(self.button, alignment=Qt.AlignBottom)
+        self.tab2.setLayout(self.tab2.layout)
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
+        self.tab3.layout = QVBoxLayout(self)
+        label = QLabel('Proxies:Ports', self.tab3)
+        label.move(130, 40)
+        label.resize(200, 20)
+        self.textbox_proxy_adclicker = QTextEdit(self.tab3)
+        self.textbox_proxy_adclicker.move(130, 70)
+        self.textbox_proxy_adclicker.resize(280, 80)
+        label = QLabel('ASIN key:', self.tab3)
+        label.move(130, 250)
+        label.resize(200, 20)
+        self.textbox_asin_adclicker = QLineEdit(self.tab3)
+        self.textbox_asin_adclicker.move(130, 280)
+        self.textbox_asin_adclicker.resize(280, 20)
+        label = QLabel('How many times:', self.tab3)
+        label.move(130, 310)
+        label.resize(200, 20)
+        self.textbox_loop_adclicker = QLineEdit(self.tab3)
+        self.textbox_loop_adclicker.move(130, 340)
+        self.textbox_loop_adclicker.resize(280, 20)
+        label = QLabel('Break from:', self.tab3)
+        label.move(130, 370)
+        label.resize(200, 20)
+        self.textbox_break_first_adclicker = QLineEdit(self.tab3)
+        self.textbox_break_first_adclicker.move(130, 400)
+        self.textbox_break_first_adclicker.resize(60, 20)
+        label = QLabel('to:', self.tab3)
+        label.move(240, 400)
+        label.resize(200, 20)
+        self.textbox_break_second_adclicker = QLineEdit(self.tab3)
+        self.textbox_break_second_adclicker.move(300, 400)
+        self.textbox_break_second_adclicker.resize(60, 20)
+        label = QLabel('Keyword to search:', self.tab3)
+        label.move(130, 430)
+        label.resize(200, 20)
+        self.textbox_keyword_adclicker = QLineEdit(self.tab3)
+        self.textbox_keyword_adclicker.move(130, 460)
+        self.textbox_keyword_adclicker.resize(200, 20)
+        self.button = QPushButton('Start Clicking Ads', self)
+        self.button.clicked.connect(self.click_ads)
+        self.tab3.layout.addWidget(self.button, alignment=Qt.AlignBottom)
+        self.tab3.setLayout(self.tab3.layout)
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
+        self.tab4.layout = QVBoxLayout(self)
+        label = QLabel('Proxies:Ports', self.tab4)
+        label.move(130, 40)
+        label.resize(200, 20)
+        self.textbox_proxy_categories = QTextEdit(self.tab4)
+        self.textbox_proxy_categories.setText("\n".join(proxy_list))
+        self.textbox_proxy_categories.move(130, 70)
+        self.textbox_proxy_categories.resize(280, 50)
+        label = QLabel('ASIN key:', self.tab4)
+        label.move(130, 120)
+        label.resize(200, 20)
+        self.textbox_asin_categories = QLineEdit(self.tab4)
+        self.textbox_asin_categories.move(130, 140)
+        self.textbox_asin_categories.resize(280, 20)
+        label = QLabel('How many times:', self.tab4)
+        label.move(130, 180)
+        label.resize(200, 20)
+        self.textbox_loop_categories = QLineEdit(self.tab4)
+        self.textbox_loop_categories.setText("10")
+        self.textbox_loop_categories.move(130, 200)
+        self.textbox_loop_categories.resize(280, 20)
+        label = QLabel('Keyword to search:', self.tab4)
+        label.move(130, 230)
+        label.resize(200, 20)
+        self.textbox_keyword_categories = QLineEdit(self.tab4)
+        self.textbox_keyword_categories.move(130, 260)
+        self.textbox_keyword_categories.resize(200, 20)
+        label = QLabel('Break from:', self.tab4)
+        label.move(130, 300)
+        label.resize(200, 20)
+        self.textbox_break_first_categories = QLineEdit(self.tab4)
+        self.textbox_break_first_categories.setText("4")
+        self.textbox_break_first_categories.move(130, 330)
+        self.textbox_break_first_categories.resize(60, 20)
+        label = QLabel('to:', self.tab4)
+        label.move(240, 330)
+        label.resize(200, 20)
+        self.textbox_break_second_categories = QLineEdit(self.tab4)
+        self.textbox_break_second_categories.setText("6")
+        self.textbox_break_second_categories.move(300, 330)
+        self.textbox_break_second_categories.resize(60, 20)
+        label = QLabel('Category URL:', self.tab4)
+        label.move(130, 360)
+        label.resize(200, 20)
+        self.textbox_category_url = QLineEdit(self.tab4)
+        self.textbox_category_url.move(130, 390)
+        self.textbox_category_url.resize(200, 20)
+        label = QLabel('Product URLs: Enter one URL each line', self.tab4)
+        label.move(130, 420)
+        label.resize(200, 20)
+        self.textbox_product_url = QTextEdit(self.tab4)
+        self.textbox_product_url.move(130, 450)
+        self.textbox_product_url.resize(600, 80)
+        self.button = QPushButton('Start Ranking Category/URL', self.tab4)
+        self.button.setGeometry(400, 423, 220, 25)
+        self.progress = QProgressBar(self.tab4)
+        self.progress.setGeometry(200, 20, 500, 20)
+        self.progress_label = QLabel('STATUS: Click on start to start processing', self.tab4)
+        self.progress_label.setGeometry(320, 42, 500, 20)
+        self.button.clicked.connect(self.rank_by_category)
+        self.check_wishlist = QCheckBox("Add to Wishlist", self.tab4)
+        self.check_wedding_list = QCheckBox("Add to Wedding List", self.tab4)
+        self.check_shopping_list = QCheckBox("Add to Shopping List", self.tab4)
+        self.check_gift_list = QCheckBox("Add to Gift List", self.tab4)
+        self.check_ranking = QCheckBox("Rank Product", self.tab4)
+        self.check_ranking.setGeometry(400, 300, 500, 20)
+        self.check_gift_list.setGeometry(400, 380, 480,20)
+        self.check_shopping_list.setGeometry(400, 360, 480,20)
+        self.check_wishlist.setGeometry(400, 340, 500, 20)
+        self.check_wedding_list.setGeometry(400, 320, 500, 20)
+        self.button.clicked.connect(self.rank_by_category)
+        self.tab4.setLayout(self.tab4.layout)
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
+        self.tab5.layout = QVBoxLayout(self)
+        label = QLabel('ASIN key:', self.tab5)
+        label.move(130, 90)
+        label.resize(200, 20)
+        self.textbox_asin_adclicker_no_proxy = QLineEdit(self.tab5)
+        self.textbox_asin_adclicker_no_proxy.move(130, 120)
+        self.textbox_asin_adclicker_no_proxy.resize(280, 20)
+        label = QLabel('How many times:', self.tab5)
+        label.move(130, 150)
+        label.resize(200, 20)
+        self.textbox_loop_adclicker_no_proxy = QLineEdit(self.tab5)
+        self.textbox_loop_adclicker_no_proxy.move(130, 180)
+        self.textbox_loop_adclicker_no_proxy.resize(280, 20)
+        label = QLabel('Break from:', self.tab5)
+        label.move(130, 210)
+        label.resize(200, 20)
+        self.textbox_break_first_adclicker_no_proxy = QLineEdit(self.tab5)
+        self.textbox_break_first_adclicker_no_proxy.move(130, 240)
+        self.textbox_break_first_adclicker_no_proxy.resize(60, 20)
+        label = QLabel('to:', self.tab5)
+        label.move(240, 210)
+        label.resize(200, 20)
+        self.textbox_break_second_adclicker_no_proxy = QLineEdit(self.tab5)
+        self.textbox_break_second_adclicker_no_proxy.move(300, 240)
+        self.textbox_break_second_adclicker_no_proxy.resize(60, 20)
+        label = QLabel('Keyword to search:', self.tab5)
+        label.move(130, 270)
+        label.resize(200, 20)
+        self.textbox_keyword_adclicker_no_proxy = QLineEdit(self.tab5)
+        self.textbox_keyword_adclicker_no_proxy.move(130, 300)
+        self.textbox_keyword_adclicker_no_proxy.resize(200, 20)
+        self.button = QPushButton('Start Clicking Ads', self)
+        self.button.clicked.connect(self.click_ads_no_proxy)
+        self.tab5.layout.addWidget(self.button, alignment=Qt.AlignBottom)
+        self.tab5.setLayout(self.tab5.layout)
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = App()
+    sys.exit(app.exec_())
